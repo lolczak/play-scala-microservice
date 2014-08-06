@@ -1,6 +1,8 @@
+import com.ofg.infrastructure.discovery.util.MicroDepsService
 import com.wordnik.swagger.config.ConfigFactory
 import com.wordnik.swagger.model.ApiInfo
 import play.api.{Application, GlobalSettings}
+import scala.io.Source
 
 /**
  *
@@ -19,8 +21,19 @@ object Global extends GlobalSettings {
 
   ConfigFactory.config.setApiInfo(info)
 
-  override def onStart(app: Application): Unit = super.onStart(app)
+  var pingService: MicroDepsService = _
 
-  override def onStop(app: Application): Unit = super.onStop(app)
+  override def onStart(app: Application): Unit = {
+    val pingDescr = app.resourceAsStream("microservice.json")
+
+    pingService = new MicroDepsService(
+      "127.0.0.1:2181", "ping", "http://localhost:9000", 9000, Source.fromInputStream(pingDescr.get).mkString
+    )
+    pingService.start()
+  }
+
+  override def onStop(app: Application): Unit = {
+    pingService.stop()
+  }
 
 }
