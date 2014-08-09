@@ -2,6 +2,7 @@ package api
 
 import play.api.libs.json._
 import play.api.libs.functional.syntax._
+import org.joda.time.DateTime
 
 /**
  *
@@ -16,10 +17,11 @@ object Ping {
 
 }
 
-case class Pong(msg: String)
+case class Pong(msg: String, timestamp: DateTime)
 
 object Pong {
 
-  implicit val format: Format[Pong] = (JsPath \ "pong").format[String].inmap(Pong.apply, unlift(Pong.unapply))
+  implicit val format: Format[Pong] =
+    ((JsPath \ "pong").format[String] and (JsPath \ "timestamp").format[DateTime])(Pong.apply, unlift(Pong.unapply))
 
 }

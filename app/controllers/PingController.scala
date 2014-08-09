@@ -2,9 +2,12 @@ package controllers
 
 import com.wordnik.swagger.annotations._
 import scala.Array
-import api.Ping
-import api.Pong
+import api.{FailResult, Ping, Pong}
 import infrastructure.ServiceAction
+import delegate.TimeServiceDelegate
+import scala.util.{Failure, Success}
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
  *
@@ -12,7 +15,8 @@ import infrastructure.ServiceAction
  * @author Lukasz Olczak
  */
 @Api(value = "/ping", description = "Ping API")
-object PingController extends BaseApiController {
+@Singleton
+class PingController @Inject() (timeService: TimeServiceDelegate) extends BaseApiController {
 
   @ApiOperation(nickname = "ping",
     value = "Ping Server",
@@ -22,6 +26,13 @@ object PingController extends BaseApiController {
     new ApiResponse(code = 405, message = "Invalid input")))
   @ApiImplicitParams(Array(
     new ApiImplicitParam(value = "Ping msg", required = true, dataType = "Ping", paramType = "body")))
-  def ping = ServiceAction { ping: Ping => Pong(ping.msg) }
+  def ping = ServiceAction {
+    ping: Ping =>
+      val timeResult = timeService.now()
+      timeResult match {
+        case Success(time) => Right(Pong(ping.msg, time))
+        case Failure(ex) => Left(FailResult(ex.getMessage))
+      }
+  }
 
 }

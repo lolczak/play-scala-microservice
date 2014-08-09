@@ -1,8 +1,11 @@
-import com.ofg.infrastructure.discovery.util.MicroDepsService
+import com.google.inject.{AbstractModule, Guice}
 import com.wordnik.swagger.config.ConfigFactory
 import com.wordnik.swagger.model.ApiInfo
+import delegate.{ZookeeperTimeServiceDelegate, TimeServiceDelegate}
+import infrastructure.ServiceExporter
+import org.apache.curator.framework.{CuratorFrameworkFactory, CuratorFramework}
+import org.apache.curator.retry.RetryNTimes
 import play.api.{Application, GlobalSettings}
-import scala.io.Source
 
 /**
  *
@@ -10,6 +13,17 @@ import scala.io.Source
  * @author Lukasz Olczak
  */
 object Global extends GlobalSettings {
+
+  val zookeeperUrl = configuration.getString("zookeeper.url").getOrElse("127.0.0.1:2181")
+
+  lazy val curatorFramework: CuratorFramework = CuratorFrameworkFactory.newClient(zookeeperUrl, new RetryNTimes(20, 5000))
+
+  val injector = Guice.createInjector(new AbstractModule {
+    protected def configure() {
+      bind(classOf[CuratorFramework]).toInstance(curatorFramework)
+      bind(classOf[TimeServiceDelegate]).to(classOf[ZookeeperTimeServiceDelegate])
+    }
+  })
 
   val info = ApiInfo(
     title = "Play Scala Microservice API",
@@ -21,19 +35,18 @@ object Global extends GlobalSettings {
 
   ConfigFactory.config.setApiInfo(info)
 
-  var pingService: MicroDepsService = _
+  var serviceExporter: ServiceExporter = _
 
   override def onStart(app: Application): Unit = {
-    val pingDescr = app.resourceAsStream("microservice.json")
-
-    pingService = new MicroDepsService(
-      "127.0.0.1:2181", "ping", "http://localhost:9000", 9000, Source.fromInputStream(pingDescr.get).mkString
-    )
-    pingService.start()
+    curatorFramework.start()
+    serviceExporter = new ServiceExporter(curatorFramework, app.configuration)
   }
 
   override def onStop(app: Application): Unit = {
-    pingService.stop()
+    serviceExporter.stop()
+    curatorFramework.close()
   }
+
+  override def getControllerInstance[A](controllerClass: Class[A]): A = injector.getInstance(controllerClass)
 
 }
